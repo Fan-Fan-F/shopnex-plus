@@ -14,6 +14,7 @@ import * as carrierService from './carrier-services'
 import type { QuoteInput } from './carrier-services'
 import { listPaymentMethods, listShippingRates } from './checkout-settings'
 import { CartError } from './errors'
+import { isValidCountryCode, normalizePhone, normalizePostalCode } from './address'
 
 export type CheckoutInput = {
   email: string
@@ -45,15 +46,15 @@ export function toMailingAddress(a: AddressFields): MailingAddress {
   const opt = (v?: string) => (v?.trim() ? v.trim() : null)
   return {
     firstName: opt(a.firstName),
-    lastName: opt(a.lastName),
+    lastName: a.lastName.trim(),
     company: opt(a.company),
     address1: a.address1.trim(),
     address2: opt(a.address2),
     city: a.city.trim(),
     province: opt(a.province),
-    countryCode: a.countryCode.toUpperCase(),
-    zip: opt(a.zip),
-    phone: opt(a.phone),
+    countryCode: a.countryCode.trim().toUpperCase(),
+    zip: normalizePostalCode(a.zip),
+    phone: normalizePhone(a.phone),
   }
 }
 
@@ -235,6 +236,9 @@ async function placeOrder(shopId: string, token: string, input: CheckoutInput) {
   if (found && found.status !== 'completed') {
     const chose = input.shippingRateId
     if (input.shippingAddress?.countryCode) {
+      if (!isValidCountryCode(input.shippingAddress.countryCode)) {
+        throw new CartError('INVALID_SHIPPING_ADDRESS', 'Enter a valid 2-letter country code')
+      }
       const quoted = await carrierService.quote(
         shopId,
         quoteInput(await cartService.view(found), input.shippingAddress),
